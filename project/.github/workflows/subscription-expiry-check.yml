@@ -1,0 +1,78 @@
+name: Subscription Expiry Check
+
+on:
+  schedule:
+    # Run every 6 hours to ensure timely processing
+    - cron: '0 */6 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  check-expired-subscriptions:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check Expired Subscriptions
+        run: |
+          echo "🔍 Checking expired subscriptions..."
+          
+          # Call the subscription manager Edge Function
+          response=$(curl -s -w "%{http_code}" -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/subscription-manager" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET_TOKEN }}" \
+            -d '{"source": "github_actions", "action": "check_expired"}')
+          
+          http_code="${response: -3}"
+          response_body="${response%???}"
+          
+          echo "HTTP Status: $http_code"
+          echo "Response: $response_body"
+          
+          if [ "$http_code" -ne 200 ]; then
+            echo "❌ Subscription check failed with status $http_code"
+            echo "Response body: $response_body"
+            exit 1
+          else
+            echo "✅ Subscription check completed successfully"
+            
+            # Parse and display summary
+            echo "$response_body" | jq -r '.summary | to_entries[] | "\(.key): \(.value)"' || echo "Summary parsing failed"
+          fi
+
+      - name: Health Check
+        run: |
+          echo "🏥 Running subscription health check..."
+          
+          # Call the health check function
+          health_response=$(curl -s -X POST \
+            "${{ secrets.SUPABASE_URL }}/rest/v1/rpc/get_subscription_health_report" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -H "apikey: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}")
+          
+          echo "Health Check Results:"
+          echo "$health_response" | jq '.' || echo "Health check parsing failed"
+          
+          # Check for critical issues
+          overdue_count=$(echo "$health_response" | jq -r '.[] | select(.metric == "overdue_subscriptions") | .count' 2>/dev/null || echo "0")
+          inconsistent_count=$(echo "$health_response" | jq -r '.[] | select(.metric == "inconsistent_user_states") | .count' 2>/dev/null || echo "0")
+          
+          if [ "$overdue_count" -gt 0 ]; then
+            echo "⚠️ WARNING: $overdue_count overdue subscriptions found!"
+          fi
+          
+          if [ "$inconsistent_count" -gt 0 ]; then
+            echo "⚠️ WARNING: $inconsistent_count inconsistent user states found!"
+          fi
+          
+          if [ "$overdue_count" -eq 0 ] && [ "$inconsistent_count" -eq 0 ]; then
+            echo "✅ All subscription states are healthy!"
+          fi
+
+      - name: Notify on Failure
+        if: failure()
+        run: |
+          echo "🚨 Subscription expiry check failed!"
+          echo "Please check the logs and investigate immediately."
+          echo "This could mean users are not being properly downgraded from expired subscriptions."
