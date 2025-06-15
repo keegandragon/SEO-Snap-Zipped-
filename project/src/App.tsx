@@ -16,8 +16,6 @@ import CookiePolicy from './pages/CookiePolicy';
 import Disclaimer from './pages/Disclaimer';
 import ForgotPassword from './pages/ForgotPassword';
 import NotFound from './pages/NotFound';
-import TestStripe from './pages/TestStripe';
-import StripeDebugger from './pages/StripeDebugger';
 import AdminDashboard from './pages/AdminDashboard';
 
 function App() {
@@ -41,8 +39,6 @@ function App() {
         <Route path="premium" element={<Premium />} />
         <Route path="subscription" element={user ? <Subscription /> : <Navigate to="/login" />} />
         <Route path="admin" element={<AdminDashboard />} />
-        <Route path="test-stripe" element={<TestStripe />} />
-        <Route path="stripe-debug" element={<StripeDebugger />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

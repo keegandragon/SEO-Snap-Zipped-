@@ -1,38 +1,22 @@
 import React, { useState } from 'react';
-import { Check, Clipboard, Copy, Mail, XCircle, Tag, Download } from 'lucide-react';
+import { Check, Clipboard, Copy, XCircle, Tag, Download } from 'lucide-react';
 import { ProductDescription } from '../types';
 import { exportSingleDescriptionToCSV } from '../services/csvService';
 import { useAuth } from '../context/AuthContext';
-import EmailForm from './EmailForm';
 
 interface DescriptionCardProps {
   description: ProductDescription;
-  onSendEmail: (email: string, description: ProductDescription) => Promise<boolean>;
 }
 
-const DescriptionCard: React.FC<DescriptionCardProps> = ({ description, onSendEmail }) => {
+const DescriptionCard: React.FC<DescriptionCardProps> = ({ description }) => {
   const { user } = useAuth();
   const [copied, setCopied] = useState(false);
-  const [showEmailForm, setShowEmailForm] = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
   const [activeTab, setActiveTab] = useState<'description' | 'seo'>('description');
 
   const handleCopyClick = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleSendEmail = async (email: string) => {
-    const success = await onSendEmail(email, description);
-    if (success) {
-      setEmailSent(true);
-      setTimeout(() => {
-        setEmailSent(false);
-        setShowEmailForm(false);
-      }, 3000);
-    }
-    return success;
   };
 
   const handleExportCSV = () => {
@@ -169,14 +153,6 @@ const DescriptionCard: React.FC<DescriptionCardProps> = ({ description, onSendEm
                 </>
               )}
             </button>
-            
-            <button 
-              onClick={() => setShowEmailForm(!showEmailForm)}
-              className="btn btn-primary flex items-center space-x-1"
-            >
-              <Mail className="h-4 w-4" />
-              <span>Email</span>
-            </button>
 
             {/* CSV Export - Pro Feature */}
             {isProUser && (
@@ -190,30 +166,6 @@ const DescriptionCard: React.FC<DescriptionCardProps> = ({ description, onSendEm
               </button>
             )}
           </div>
-          
-          {showEmailForm && (
-            <div className="mt-4 p-4 border border-gray-200 rounded-md bg-gray-50 animate-slide-up">
-              {emailSent ? (
-                <div className="text-center py-2">
-                  <Check className="h-6 w-6 text-green-500 mx-auto mb-2" />
-                  <p className="text-sm text-gray-700">Description sent successfully!</p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="text-sm font-medium">Send via Email</h4>
-                    <button 
-                      onClick={() => setShowEmailForm(false)}
-                      className="text-gray-400 hover:text-gray-500"
-                    >
-                      <XCircle className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <EmailForm onSubmit={handleSendEmail} />
-                </>
-              )}
-            </div>
-          )}
         </div>
       </div>
     </div>

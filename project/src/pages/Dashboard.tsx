@@ -5,9 +5,9 @@ import ImageUploader from '../components/ImageUploader';
 import DescriptionCard from '../components/DescriptionCard';
 import UsageIndicator from '../components/UsageIndicator';
 import { UploadedImage, ProductDescription } from '../types';
-import { generateProductDescription, sendDescriptionByEmail } from '../services/aiService';
+import { generateProductDescription } from '../services/aiService';
 import { exportToCSV } from '../services/csvService';
-import { Sparkles, Info, AlertCircle, Download, Settings, Crown, Calendar, User, CreditCard, X, Copy, Mail, FileText, CheckCircle } from 'lucide-react';
+import { Sparkles, Info, AlertCircle, Download, Settings, Crown, Calendar, User, CreditCard, X, Copy, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 const Dashboard = () => {
@@ -19,6 +19,8 @@ const Dashboard = () => {
   const [generationLimit, setGenerationLimit] = useState(false);
   const [activeTab, setActiveTab] = useState<'generate' | 'account'>('generate');
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [subscriptionData, setSubscriptionData] = useState<any>(null);
+  const [loadingSubscription, setLoadingSubscription] = useState(false);
   
   // Progress tracking state
   const [batchProgress, setBatchProgress] = useState({
@@ -29,9 +31,7 @@ const Dashboard = () => {
   });
 
   // Bulk actions state
-  const [bulkActionLoading, setBulkActionLoading] = useState<'copy' | 'email' | 'csv' | null>(null);
-  const [showBulkEmailForm, setShowBulkEmailForm] = useState(false);
-  const [bulkEmail, setBulkEmail] = useState('');
+  const [bulkActionLoading, setBulkActionLoading] = useState<'copy' | 'csv' | null>(null);
   const [bulkActionSuccess, setBulkActionSuccess] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,6 +41,47 @@ const Dashboard = () => {
       setGenerationLimit(false);
     }
   }, [user]);
+
+  // Scroll to top when tab changes
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [activeTab]);
+
+  // Load subscription data when user changes or when account tab is selected
+  useEffect(() => {
+    if (user && activeTab === 'account') {
+      loadSubscriptionData();
+    }
+  }, [user, activeTab]);
+
+  const loadSubscriptionData = async () => {
+    if (!user) return;
+    
+    try {
+      setLoadingSubscription(true);
+      
+      // Get user's current subscription
+      const { data: subscription, error: subError } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (subError) {
+        console.error('Error loading subscription:', subError);
+        return;
+      }
+
+      setSubscriptionData(subscription);
+    } catch (error) {
+      console.error('Error loading subscription data:', error);
+    } finally {
+      setLoadingSubscription(false);
+    }
+  };
 
   const handleImageUpload = (uploadedImages: UploadedImage[]) => {
     console.log('Images updated:', uploadedImages.map(img => ({ id: img.id, status: img.status })));
@@ -289,15 +330,6 @@ const Dashboard = () => {
     });
   };
 
-  const handleSendEmail = async (email: string, description: ProductDescription) => {
-    try {
-      return await sendDescriptionByEmail(email, description);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send email");
-      return false;
-    }
-  };
-
   const handleExportAllCSV = () => {
     if (descriptions.length === 0) {
       setError("No descriptions to export");
@@ -341,42 +373,6 @@ ${'='.repeat(60)}
     }
   };
 
-  const handleBulkEmailAll = async () => {
-    if (!bulkEmail || descriptions.length === 0) return;
-    
-    setBulkActionLoading('email');
-    try {
-      // Send all descriptions in one email
-      const { data: emailData, error: emailError } = await supabase.functions.invoke(
-        'send-bulk-email',
-        {
-          body: {
-            email: bulkEmail,
-            descriptions: descriptions,
-            totalCount: descriptions.length
-          }
-        }
-      );
-
-      if (emailError) {
-        throw new Error(emailError.message || 'Failed to send bulk email');
-      }
-
-      if (!emailData || !emailData.success) {
-        throw new Error(emailData?.error || 'Failed to send bulk email');
-      }
-
-      setBulkActionSuccess(`Successfully emailed all ${descriptions.length} descriptions!`);
-      setShowBulkEmailForm(false);
-      setBulkEmail('');
-      setTimeout(() => setBulkActionSuccess(null), 3000);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to send bulk email');
-    } finally {
-      setBulkActionLoading(null);
-    }
-  };
-
   const handleBulkExportCSV = () => {
     if (descriptions.length === 0) return;
     
@@ -399,6 +395,11 @@ ${'='.repeat(60)}
     alert('Subscription cancellation would be processed here. Contact support for assistance.');
   };
 
+  const handleTabChange = (newTab: 'generate' | 'account') => {
+    setActiveTab(newTab);
+    // Scroll to top will be handled by the useEffect above
+  };
+
   if (!user) return null;
 
   const planFeatures = getPlanFeatures();
@@ -411,8 +412,19 @@ ${'='.repeat(60)}
     return 'Free Plan';
   };
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
+    });
+  };
+
   const getNextBillingDate = () => {
-    // For demo purposes, show next month
+    if (subscriptionData?.current_period_end) {
+      return formatDate(subscriptionData.current_period_end);
+    }
+    // Fallback for free plan or missing data
     const nextMonth = new Date();
     nextMonth.setMonth(nextMonth.getMonth() + 1);
     return nextMonth.toLocaleDateString('en-US', { 
@@ -420,6 +432,25 @@ ${'='.repeat(60)}
       month: 'long', 
       day: 'numeric' 
     });
+  };
+
+  const getSubscriptionStatus = () => {
+    if (!subscriptionData) return 'Free Plan';
+    
+    if (subscriptionData.cancel_at_period_end) {
+      return `Canceling (ends ${formatDate(subscriptionData.current_period_end)})`;
+    }
+    
+    switch (subscriptionData.status) {
+      case 'active':
+        return 'Active';
+      case 'canceled':
+        return 'Canceled';
+      case 'expired':
+        return 'Expired';
+      default:
+        return subscriptionData.status || 'Unknown';
+    }
   };
 
   // Check if generation button should be enabled
@@ -448,7 +479,7 @@ ${'='.repeat(60)}
             {/* Tab Navigation */}
             <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
               <button
-                onClick={() => setActiveTab('generate')}
+                onClick={() => handleTabChange('generate')}
                 className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
                   activeTab === 'generate'
                     ? 'bg-white text-gray-900 shadow-sm'
@@ -459,7 +490,7 @@ ${'='.repeat(60)}
                 Generate
               </button>
               <button
-                onClick={() => setActiveTab('account')}
+                onClick={() => handleTabChange('account')}
                 className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
                   activeTab === 'account'
                     ? 'bg-white text-gray-900 shadow-sm'
@@ -498,7 +529,7 @@ ${'='.repeat(60)}
                       </div>
                       {user.isPremium && (
                         <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">
-                          Active
+                          {getSubscriptionStatus()}
                         </span>
                       )}
                     </div>
@@ -516,17 +547,40 @@ ${'='.repeat(60)}
                 {user.isPremium && (
                   <div>
                     <h3 className="text-sm font-medium text-gray-700 mb-3">Billing</h3>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <div className="flex items-center mb-2">
-                        <Calendar className="h-4 w-4 text-gray-400 mr-2" />
-                        <span className="text-sm text-gray-600">Next billing date</span>
+                    {loadingSubscription ? (
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                        </div>
                       </div>
-                      <p className="text-sm font-medium text-gray-900 mb-3">{getNextBillingDate()}</p>
-                      <div className="flex items-center">
-                        <CreditCard className="h-4 w-4 text-gray-400 mr-2" />
-                        <span className="text-sm text-gray-600">•••• •••• •••• 4242</span>
+                    ) : (
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center mb-2">
+                          <Calendar className="h-4 w-4 text-gray-400 mr-2" />
+                          <span className="text-sm text-gray-600">
+                            {subscriptionData?.cancel_at_period_end ? 'Subscription ends' : 'Next billing date'}
+                          </span>
+                        </div>
+                        <p className="text-sm font-medium text-gray-900 mb-3">{getNextBillingDate()}</p>
+                        
+                        {subscriptionData?.stripe_subscription_id && (
+                          <div className="flex items-center">
+                            <CreditCard className="h-4 w-4 text-gray-400 mr-2" />
+                            <span className="text-sm text-gray-600">
+                              Subscription ID: {subscriptionData.stripe_subscription_id.substring(0, 12)}...
+                            </span>
+                          </div>
+                        )}
+                        
+                        {!subscriptionData && (
+                          <div className="flex items-center">
+                            <CreditCard className="h-4 w-4 text-gray-400 mr-2" />
+                            <span className="text-sm text-gray-600">Billing information not available</span>
+                          </div>
+                        )}
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -540,7 +594,7 @@ ${'='.repeat(60)}
                     {user.isPremium ? 'Manage Subscription' : 'Upgrade Plan'}
                   </Link>
                   
-                  {user.isPremium && (
+                  {user.isPremium && subscriptionData && !subscriptionData.cancel_at_period_end && (
                     <button 
                       onClick={() => setShowCancelModal(true)}
                       className="btn btn-outline w-full flex items-center justify-center text-red-600 border-red-300 hover:bg-red-50"
@@ -571,6 +625,12 @@ ${'='.repeat(60)}
                       <span className="text-gray-600">Current plan</span>
                       <span className="text-gray-900">{getCurrentPlanName()}</span>
                     </div>
+                    {subscriptionData && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subscription status</span>
+                        <span className="text-gray-900">{getSubscriptionStatus()}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -723,7 +783,7 @@ ${'='.repeat(60)}
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <h2 className="text-xl font-bold text-gray-900">Your Descriptions ({descriptions.length})</h2>
                     
-                    {/* Bulk Actions - Only show CSV export for Pro users */}
+                    {/* Bulk Actions */}
                     <div className="flex flex-wrap gap-2">
                       {/* Copy All Button */}
                       <button
@@ -738,16 +798,6 @@ ${'='.repeat(60)}
                           <Copy className="h-4 w-4" />
                         )}
                         <span>Copy All</span>
-                      </button>
-
-                      {/* Email All Button */}
-                      <button
-                        onClick={() => setShowBulkEmailForm(!showBulkEmailForm)}
-                        className="btn btn-outline flex items-center space-x-2 text-sm"
-                        title="Email all descriptions"
-                      >
-                        <Mail className="h-4 w-4" />
-                        <span>Email All</span>
                       </button>
 
                       {/* Export All CSV Button - ONLY FOR PRO USERS */}
@@ -783,59 +833,11 @@ ${'='.repeat(60)}
                       )}
                     </div>
                   </div>
-
-                  {/* Bulk Email Form */}
-                  {showBulkEmailForm && (
-                    <div className="card bg-blue-50 border-blue-200">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-4">Email All Descriptions</h3>
-                      <p className="text-sm text-gray-600 mb-4">
-                        Send all {descriptions.length} descriptions in one comprehensive email.
-                      </p>
-                      <div className="flex space-x-3">
-                        <input
-                          type="email"
-                          placeholder="Enter email address"
-                          value={bulkEmail}
-                          onChange={(e) => setBulkEmail(e.target.value)}
-                          className="input flex-1"
-                          disabled={bulkActionLoading === 'email'}
-                        />
-                        <button
-                          onClick={handleBulkEmailAll}
-                          disabled={!bulkEmail || bulkActionLoading === 'email'}
-                          className="btn btn-primary flex items-center space-x-2"
-                        >
-                          {bulkActionLoading === 'email' ? (
-                            <>
-                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              <span>Sending...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Mail className="h-4 w-4" />
-                              <span>Send All</span>
-                            </>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setShowBulkEmailForm(false);
-                            setBulkEmail('');
-                          }}
-                          className="btn btn-outline"
-                          disabled={bulkActionLoading === 'email'}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  )}
                   
                   {descriptions.map(description => (
                     <DescriptionCard 
                       key={description.id}
                       description={description}
-                      onSendEmail={handleSendEmail}
                     />
                   ))}
                 </div>
@@ -902,7 +904,7 @@ ${'='.repeat(60)}
                         </div>
                         {user.isPremium && (
                           <span className="bg-green-100 text-green-800 text-xs font-medium px-2.5 py-0.5 rounded-full">
-                            Active
+                            {getSubscriptionStatus()}
                           </span>
                         )}
                       </div>

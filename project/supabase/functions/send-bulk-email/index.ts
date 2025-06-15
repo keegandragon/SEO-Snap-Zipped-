@@ -19,16 +19,96 @@ interface ProductDescription {
 }
 
 async function sendBulkEmail(email: string, descriptions: ProductDescription[], totalCount: number) {
-  // For now, we'll use a simple email service like Resend
-  // You can also use SendGrid, Mailgun, or other services
-  const resendApiKey = Deno.env.get('RESEND_API_KEY');
+  // Try multiple email services in order of preference
   
-  if (!resendApiKey) {
-    throw new Error('Email service not configured. Please add RESEND_API_KEY to your Supabase Edge Function environment variables.');
+  // First try Resend (recommended)
+  const resendApiKey = Deno.env.get('RESEND_API_KEY');
+  if (resendApiKey) {
+    return await sendWithResend(email, descriptions, totalCount, resendApiKey);
+  }
+  
+  // Fallback to SendGrid
+  const sendGridApiKey = Deno.env.get('SENDGRID_API_KEY');
+  if (sendGridApiKey) {
+    return await sendWithSendGrid(email, descriptions, totalCount, sendGridApiKey);
+  }
+  
+  // Fallback to simulation
+  return await sendWithFallbackService(email, descriptions, totalCount);
+}
+
+async function sendWithResend(email: string, descriptions: ProductDescription[], totalCount: number, apiKey: string) {
+  const emailContent = createBulkEmailHTML(descriptions, totalCount);
+  
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'SEO Snap <noreply@seosnap.com>',
+      to: [email],
+      subject: `Your ${totalCount} SEO-Optimized Product Descriptions from SEO Snap`,
+      html: emailContent,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Resend API error: ${response.status} - ${errorText}`);
   }
 
-  // Create comprehensive email content with all descriptions
-  const emailContent = `
+  return await response.json();
+}
+
+async function sendWithSendGrid(email: string, descriptions: ProductDescription[], totalCount: number, apiKey: string) {
+  const emailContent = createBulkEmailHTML(descriptions, totalCount);
+  
+  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      personalizations: [{
+        to: [{ email: email }],
+        subject: `Your ${totalCount} SEO-Optimized Product Descriptions from SEO Snap`
+      }],
+      from: { email: 'noreply@seosnap.com', name: 'SEO Snap' },
+      content: [{
+        type: 'text/html',
+        value: emailContent
+      }]
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`SendGrid API error: ${response.status} - ${errorText}`);
+  }
+
+  return { success: true };
+}
+
+async function sendWithFallbackService(email: string, descriptions: ProductDescription[], totalCount: number) {
+  // Simulate sending and log the email content
+  console.log('=== BULK EMAIL CONTENT (Fallback Mode) ===');
+  console.log(`To: ${email}`);
+  console.log(`Subject: Your ${totalCount} SEO-Optimized Product Descriptions from SEO Snap`);
+  console.log('Content:', createBulkEmailHTML(descriptions, totalCount));
+  console.log('=== END BULK EMAIL CONTENT ===');
+  
+  return { 
+    success: true, 
+    message: 'Bulk email simulated (no email service configured)',
+    fallback: true 
+  };
+}
+
+function createBulkEmailHTML(descriptions: ProductDescription[], totalCount: number): string {
+  return `
 <!DOCTYPE html>
 <html>
 <head>
@@ -36,35 +116,59 @@ async function sendBulkEmail(email: string, descriptions: ProductDescription[], 
     <title>Your SEO Snap Product Descriptions (${totalCount} Items)</title>
     <style>
         body { 
-            font-family: Arial, sans-serif; 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             line-height: 1.6; 
             color: #333; 
             max-width: 800px; 
             margin: 0 auto; 
-            padding: 20px; 
+            padding: 20px;
+            background-color: #f8fafc;
+        }
+        .container {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         .header { 
-            background: #1e40af; 
+            background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
             color: white; 
             padding: 30px; 
             text-align: center; 
-            border-radius: 8px 8px 0 0; 
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 16px;
         }
         .content { 
-            background: #f9fafb; 
             padding: 30px; 
-            border-radius: 0 0 8px 8px; 
         }
         .summary {
-            background: #dbeafe;
+            background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
             border: 1px solid #93c5fd;
-            border-radius: 6px;
+            border-radius: 8px;
             padding: 20px;
             margin-bottom: 30px;
             text-align: center;
         }
+        .summary h2 {
+            margin: 0 0 10px 0; 
+            color: #1e40af;
+            font-size: 22px;
+        }
+        .summary p {
+            margin: 0; 
+            font-size: 16px;
+            color: #374151;
+        }
         .product-item {
-            background: white;
+            background: #fafafa;
             border: 1px solid #e5e7eb;
             border-radius: 8px;
             padding: 25px;
@@ -85,15 +189,21 @@ async function sendBulkEmail(email: string, descriptions: ProductDescription[], 
             color: #1e40af; 
             font-size: 22px; 
             margin-bottom: 15px; 
-            font-weight: bold;
+            font-weight: 600;
         }
         .description { 
-            background: #f8fafc; 
+            background: white; 
             padding: 20px; 
             border-radius: 6px; 
             margin: 15px 0; 
             border-left: 4px solid #1e40af; 
             line-height: 1.7;
+        }
+        .description h3 {
+            margin-top: 0;
+            color: #374151;
+            font-size: 16px;
+            font-weight: 600;
         }
         .seo-section { 
             background: #f0f9ff; 
@@ -103,7 +213,7 @@ async function sendBulkEmail(email: string, descriptions: ProductDescription[], 
             border: 1px solid #bae6fd;
         }
         .seo-title { 
-            font-weight: bold; 
+            font-weight: 600; 
             color: #0c4a6e; 
             margin-bottom: 8px; 
             font-size: 14px;
@@ -131,6 +241,13 @@ async function sendBulkEmail(email: string, descriptions: ProductDescription[], 
             border-top: 1px solid #e5e7eb;
             padding-top: 30px;
         }
+        .footer a {
+            color: #1e40af;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
         .divider {
             border: none;
             height: 2px;
@@ -144,99 +261,93 @@ async function sendBulkEmail(email: string, descriptions: ProductDescription[], 
             margin-top: 15px;
             text-align: right;
         }
+        .cta-button {
+            display: inline-block;
+            background: #1e40af;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: 600;
+            margin: 20px 0;
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>📸 SEO Snap</h1>
-        <p>Your Complete Product Description Collection</p>
-        <p style="font-size: 18px; margin-top: 15px;">${totalCount} AI-Generated Descriptions</p>
-    </div>
-    
-    <div class="content">
-        <div class="summary">
-            <h2 style="margin: 0 0 10px 0; color: #1e40af;">Batch Generation Complete!</h2>
-            <p style="margin: 0; font-size: 16px;">
-                Successfully generated <strong>${totalCount} product descriptions</strong> with SEO optimization, 
-                keywords, and metadata ready for your e-commerce store.
-            </p>
+    <div class="container">
+        <div class="header">
+            <h1>📸 SEO Snap</h1>
+            <p>Your Complete Product Description Collection</p>
+            <p style="font-size: 18px; margin-top: 15px;">${totalCount} AI-Generated Descriptions</p>
         </div>
+        
+        <div class="content">
+            <div class="summary">
+                <h2>🎉 Batch Generation Complete!</h2>
+                <p>
+                    Successfully generated <strong>${totalCount} product descriptions</strong> with SEO optimization, 
+                    keywords, and metadata ready for your e-commerce store.
+                </p>
+            </div>
 
-        ${descriptions.map((description, index) => `
-            <div class="product-item">
-                <div class="product-number">Product ${index + 1} of ${totalCount}</div>
-                <h2 class="product-title">${description.title}</h2>
-                
-                <div class="description">
-                    <h3 style="margin-top: 0; color: #374151;">Product Description:</h3>
-                    <p style="margin-bottom: 0;">${description.text.replace(/\n/g, '<br>')}</p>
-                </div>
-                
-                <div class="seo-section">
-                    <div class="seo-title">SEO Title:</div>
-                    <p style="margin: 0 0 15px 0; font-weight: 500;">${description.seoMetadata.title}</p>
+            ${descriptions.map((description, index) => `
+                <div class="product-item">
+                    <div class="product-number">Product ${index + 1} of ${totalCount}</div>
+                    <h2 class="product-title">${description.title}</h2>
                     
-                    <div class="seo-title">Meta Description:</div>
-                    <p style="margin: 0 0 15px 0;">${description.seoMetadata.description}</p>
+                    <div class="description">
+                        <h3>📝 Product Description:</h3>
+                        <p>${description.text.replace(/\n/g, '<br>')}</p>
+                    </div>
                     
-                    <div class="seo-title">SEO Tags:</div>
+                    <div class="seo-section">
+                        <div class="seo-title">🎯 SEO Title:</div>
+                        <p style="margin: 0 0 15px 0; font-weight: 500;">${description.seoMetadata.title}</p>
+                        
+                        <div class="seo-title">📄 Meta Description:</div>
+                        <p style="margin: 0 0 15px 0;">${description.seoMetadata.description}</p>
+                        
+                        <div class="seo-title">🏷️ SEO Tags:</div>
+                        <div class="tags">
+                            ${description.seoMetadata.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
+                        </div>
+                    </div>
+                    
                     <div class="tags">
-                        ${description.seoMetadata.tags.map(tag => `<span class="tag">${tag}</span>`).join('')}
+                        <strong style="color: #374151;">🔑 Keywords:</strong><br>
+                        ${description.keywords.map(keyword => `<span class="tag">${keyword}</span>`).join('')}
+                    </div>
+
+                    <div class="meta-info">
+                        Generated: ${new Date(description.createdAt).toLocaleDateString('en-US', { 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })}
                     </div>
                 </div>
-                
-                <div class="tags">
-                    <strong style="color: #374151;">Keywords:</strong><br>
-                    ${description.keywords.map(keyword => `<span class="tag">${keyword}</span>`).join('')}
-                </div>
+                ${index < descriptions.length - 1 ? '<hr class="divider">' : ''}
+            `).join('')}
 
-                <div class="meta-info">
-                    Generated: ${new Date(description.createdAt).toLocaleDateString('en-US', { 
-                        year: 'numeric', 
-                        month: 'long', 
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    })}
-                </div>
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="https://seosnap.com" class="cta-button">Generate More Descriptions</a>
             </div>
-            ${index < descriptions.length - 1 ? '<hr class="divider">' : ''}
-        `).join('')}
-    </div>
-    
-    <div class="footer">
-        <p><strong>Generated by SEO Snap - AI-Powered Product Descriptions</strong></p>
-        <p>Visit us at <a href="https://seosnap.com" style="color: #1e40af;">seosnap.com</a></p>
-        <p style="margin-top: 20px; font-size: 12px;">
-            This email contains ${totalCount} product descriptions with SEO optimization.<br>
-            Copy and paste the content directly into your e-commerce platform.
-        </p>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Generated by SEO Snap - AI-Powered Product Descriptions</strong></p>
+            <p>Visit us at <a href="https://seosnap.com">seosnap.com</a></p>
+            <p style="margin-top: 20px; font-size: 12px;">
+                This email contains ${totalCount} product descriptions with SEO optimization.<br>
+                Copy and paste the content directly into your e-commerce platform.
+            </p>
+        </div>
     </div>
 </body>
 </html>
   `;
-
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${resendApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from: 'SEO Snap <noreply@seosnap.com>',
-      to: [email],
-      subject: `Your ${totalCount} SEO-Optimized Product Descriptions from SEO Snap`,
-      html: emailContent,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Email service error: ${response.status} - ${errorText}`);
-  }
-
-  const result = await response.json();
-  return result;
 }
 
 Deno.serve(async (req) => {
@@ -297,13 +408,16 @@ Deno.serve(async (req) => {
     }
 
     console.log(`Sending bulk email to: ${email} with ${descriptions.length} descriptions`);
-    await sendBulkEmail(email, descriptions, totalCount || descriptions.length);
+    const result = await sendBulkEmail(email, descriptions, totalCount || descriptions.length);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: `Successfully sent ${descriptions.length} descriptions to ${email}`,
-        totalDescriptions: descriptions.length
+        message: result.fallback ? 
+          `Email functionality is in demo mode. Would have sent ${descriptions.length} descriptions to ${email}` :
+          `Successfully sent ${descriptions.length} descriptions to ${email}`,
+        totalDescriptions: descriptions.length,
+        demo: result.fallback || false
       }),
       {
         headers: corsHeaders
@@ -317,7 +431,7 @@ Deno.serve(async (req) => {
       JSON.stringify({ 
         error: error.message || 'Failed to send bulk email',
         success: false,
-        details: 'Please ensure your email service is properly configured in Supabase Edge Function environment variables.'
+        details: 'Email service configuration needed. Contact support for assistance.'
       }),
       {
         status: 500,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Crown, ChevronDown, Check, Settings } from 'lucide-react';
 import { UserType } from '../types';
@@ -36,11 +36,26 @@ const UsageIndicator: React.FC<UsageIndicatorProps> = ({ user }) => {
 
   const currentPlan = getCurrentPlan();
 
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.plan-menu-container')) {
+        setShowPlanMenu(false);
+      }
+    };
+
+    if (showPlanMenu) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  }, [showPlanMenu]);
+
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
       <div className="flex justify-between items-center mb-2">
         <h3 className="text-sm font-medium text-gray-700">Description Generations</h3>
-        <div className="relative">
+        <div className="relative plan-menu-container">
           <button
             onClick={() => setShowPlanMenu(!showPlanMenu)}
             className={`flex items-center space-x-1 text-sm ${

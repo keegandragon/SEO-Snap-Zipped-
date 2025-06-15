@@ -41,7 +41,6 @@ const Pricing = () => {
         'Short descriptions (150 words)',
         'Single image upload only',
         'Copy to clipboard',
-        'Email sharing',
         'Community support'
       ],
       limitations: [
@@ -68,6 +67,7 @@ const Pricing = () => {
         'Batch upload: 2 images at once',
         'Priority processing',
         'Email support',
+        'Email sharing',
         'Advanced AI model'
       ],
       limitations: [],
@@ -90,6 +90,7 @@ const Pricing = () => {
         'Batch upload: 10 images at once',
         'Priority processing',
         'Premium support',
+        'Email sharing',
         'Export to CSV',
         'Advanced analytics'
       ],
@@ -469,6 +470,12 @@ const Pricing = () => {
                   <td className="py-3 px-4 text-center">150 words</td>
                   <td className="py-3 px-4 text-center">300 words</td>
                   <td className="py-3 px-4 text-center">500 words</td>
+                </tr>
+                <tr>
+                  <td className="py-3 px-4 text-gray-700">Email Sharing</td>
+                  <td className="py-3 px-4 text-center">❌</td>
+                  <td className="py-3 px-4 text-center">✅</td>
+                  <td className="py-3 px-4 text-center">✅</td>
                 </tr>
                 <tr>
                   <td className="py-3 px-4 text-gray-700">CSV Export</td>

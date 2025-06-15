@@ -75,18 +75,6 @@ const AdminDashboard = () => {
         {/* Additional Admin Tools */}
         <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="card">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Quick Actions</h3>
-            <div className="space-y-2">
-              <Link to="/stripe-debug" className="btn btn-outline w-full text-sm">
-                Stripe Debugger
-              </Link>
-              <Link to="/test-stripe" className="btn btn-outline w-full text-sm">
-                Test Stripe Integration
-              </Link>
-            </div>
-          </div>
-
-          <div className="card">
             <h3 className="text-lg font-semibold text-gray-900 mb-3">System Status</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
@@ -115,6 +103,18 @@ const AdminDashboard = () => {
               </a>
               <a href="#" className="block text-blue-800 hover:text-blue-700">
                 API Documentation
+              </a>
+            </div>
+          </div>
+
+          <div className="card">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Support</h3>
+            <div className="space-y-2 text-sm">
+              <p className="text-gray-600">
+                For technical support or questions about the admin dashboard, contact the development team.
+              </p>
+              <a href="mailto:support@seosnap.com" className="block text-blue-800 hover:text-blue-700">
+                Contact Support
               </a>
             </div>
           </div>

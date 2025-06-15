@@ -61,7 +61,8 @@ const Plans = () => {
           .from('subscriptions')
           .select('*')
           .eq('user_id', user.id)
-          .maybeSingle();
+          .order('created_at', { ascending: false })
+          .limit(1);
 
         if (subError) throw subError;
         setSubscription(sub);
@@ -173,7 +174,8 @@ const Plans = () => {
           '10 SEO tags per product',
           'Long-form descriptions (300 words)', 
           'Batch upload: 2 images at once',
-          'Priority processing'
+          'Priority processing',
+          'Email sharing'
         ];
       } else if (productName.toLowerCase().includes('pro')) {
         planType = 'pro';
@@ -184,6 +186,7 @@ const Plans = () => {
           'Long-form descriptions (500 words)', 
           'Batch upload: 10 images at once',
           'Priority processing',
+          'Email sharing',
           'Export to CSV',
           'Advanced analytics'
         ];
@@ -217,8 +220,7 @@ const Plans = () => {
       '5 SEO tags per product',
       'Short descriptions (150 words)',
       'Single image upload only',
-      'Copy to clipboard', 
-      'Email sharing', 
+      'Copy to clipboard',
       'Community support'
     ],
     planType: 'free' as const,
@@ -354,7 +356,7 @@ const Plans = () => {
                     <ul className="text-sm text-red-700 list-disc pl-5 space-y-1">
                       <li>The Stripe Price IDs in the database may be invalid or placeholder values</li>
                       <li>Real Stripe Price IDs start with "price_" followed by a long string</li>
-                      <li>You can use the Stripe Debugger to identify and fix invalid Price IDs</li>
+                      <li>Please contact support for assistance with payment processing</li>
                     </ul>
                   </div>
                 )}
@@ -366,13 +368,6 @@ const Plans = () => {
                   >
                     Dismiss
                   </button>
-                  <Link
-                    to="/stripe-debug"
-                    className="btn btn-primary btn-sm inline-flex items-center"
-                  >
-                    <Settings className="w-4 h-4 mr-2" />
-                    Open Stripe Debugger
-                  </Link>
                 </div>
               </div>
             </div>
@@ -633,6 +628,12 @@ const Plans = () => {
                   <td className="py-3 px-4 text-center">500 words</td>
                 </tr>
                 <tr>
+                  <td className="py-3 px-4 text-gray-700">Email Sharing</td>
+                  <td className="py-3 px-4 text-center">❌</td>
+                  <td className="py-3 px-4 text-center">✅</td>
+                  <td className="py-3 px-4 text-center">✅</td>
+                </tr>
+                <tr>
                   <td className="py-3 px-4 text-gray-700">CSV Export</td>
                   <td className="py-3 px-4 text-center">❌</td>
                   <td className="py-3 px-4 text-center">❌</td>
@@ -666,15 +667,9 @@ const Plans = () => {
         <div className="text-center">
           <div className="flex flex-wrap justify-center gap-4">
             {user ? (
-              <>
-                <Link to="/dashboard" className="btn btn-outline">
-                  Return to Dashboard
-                </Link>
-                <Link to="/stripe-debug" className="btn btn-outline inline-flex items-center">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Stripe Debugger
-                </Link>
-              </>
+              <Link to="/dashboard" className="btn btn-outline">
+                Return to Dashboard
+              </Link>
             ) : (
               <>
                 <Link to="/register" className="btn btn-primary">
